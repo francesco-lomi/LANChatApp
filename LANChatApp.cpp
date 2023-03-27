@@ -20,7 +20,21 @@
 
 using namespace std;
 
+void setCursor(int x, int y) {
+	COORD coords;
+	coords.X = x;
+	coords.Y = y;
+	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coords);
+}
+
+COORD gcsbi() {
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+	return csbi.dwSize;
+}
+
 int main() {
+
 	WSADATA wsaData;
 	SOCKET defSocket = INVALID_SOCKET;
 	sockaddr_in service;
