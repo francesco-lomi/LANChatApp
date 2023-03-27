@@ -6,8 +6,8 @@
 #define UNICODE
 #endif
 
-#ifndef _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#ifndef _UNICODE
+#define _UNICODE
 #endif
 
 #include <windows.h>
@@ -24,29 +24,46 @@ int main() {
 	WSADATA wsaData;
 	SOCKET defSocket = INVALID_SOCKET;
 	sockaddr_in service;
-	int iResult;
+
+	try {
+		// Initialize Winsock
+		int errorCode = WSAStartup(MAKEWORD(2, 2), &wsaData);
+		if (errorCode != 0) {
+			cerr << L"WSAStartup failed, error code: " << errorCode;
+			return EXIT_FAILURE;
+		}
+
+		// Create a SOCKET for listening for incoming connection requests
+		defSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (defSocket == INVALID_SOCKET) {
+			cerr << L"Socket function failed with error: " << WSAGetLastError();
+			WSACleanup();
+			return EXIT_FAILURE;
+		}
 
 
-	// Initialize Winsock
-	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (iResult != 0) {
-		cerr << L"WSAStartup failed, error code: " << iResult;
-		return 1;
+		// The sockaddr_in structure specifies the address family,
+		// IP address, and port for the socket that is being bound.
+		service.sin_family = AF_INET;
+		errorCode = InetPton(AF_INET, L"127.0.0.1", &service.sin_addr.s_addr);
+		if (!errorCode)
+			throw errorCode;
+		service.sin_port = htons(27015);
 	}
-
-	// Create a SOCKET for listening for incoming connection requests
-	defSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (defSocket == INVALID_SOCKET) {
-		cerr << L"Socket function failed with error: " << WSAGetLastError();
+	catch (int e) {
+		cerr << "Error: " << WSAGetLastError;
 		WSACleanup();
-		return 1;
+		closesocket(defSocket);
+		return EXIT_FAILURE;
+	}
+	catch (exception &e) {
+		cerr << "Unknown error: " << e.what();
+		WSACleanup();
+		closesocket(defSocket);
+		return EXIT_FAILURE;
 	}
 
-	// The sockaddr_in structure specifies the address family,
-	// IP address, and port for the socket that is being bound.
-	service.sin_family = AF_INET;
-	service.sin_addr.s_addr = inet_addr("127.0.0.1");
-	service.sin_port = htons(27015);
-
+	WSACleanup();
+	closesocket(defSocket);
 	return 0;
 }
