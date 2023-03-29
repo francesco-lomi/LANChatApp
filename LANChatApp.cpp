@@ -10,10 +10,6 @@
 #define _UNICODE
 #endif
 
-#ifdef UNICODE
-#define SetWindowText  SetWindowTextW
-#endif
-
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -26,8 +22,14 @@
 
 using namespace std;
 
+class wrongIP : public exception {
+	virtual const char* what() const throw() {
+		return "Wrong IP address!";
+	}
+};
+
 void setCursor(int x, int y) {
-	COORD coords;
+	COORD coords = {};
 	coords.X = x;
 	coords.Y = y;
 	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coords);
@@ -47,9 +49,9 @@ int main(int argc, char const* argv[]) {
 	WSADATA wsaData;
 	SOCKET defSocket = INVALID_SOCKET;
 	sockaddr_in service{};
-	PCWSTR IPAddr = L"127.0.0.1";
+	wstring IPAddr = L"127.0.0.1";
 	int port = 54321;
-	enum {unchoosen, connect, listen, filter} mode = unchoosen;
+	enum { unchoosen, client, server } mode = unchoosen;
 
 	SetWindowText(GetForegroundWindow(), L"LANChatApp");
 
@@ -72,26 +74,25 @@ int main(int argc, char const* argv[]) {
 	wcout << L"Select whether to connect to a known host or wait for incoming connections:" << endl;
 	wcout << L"\tPress 1 - Connect to an IP address" << endl;
 	wcout << L"\tPress 2 - Accept any incoming connection" << endl;
-	wcout << L"\tPress 3 - Wait for and accept a connection only from a chosen IP address" << endl;
 
-	while(mode == unchoosen) {
+	while (mode == unchoosen) {
 		switch (_getch()) {
 		case '1':
-			mode = connect;
+			mode = client;
 			clear();
 			wcout << L"Type in the desired IP address to connect to: ";
+			wcin >> IPAddr;
 			break;
 		case '2':
-			mode = listen;
-
-			break;
-		case '3':
-			mode = filter;
-
+			mode = server;
 			break;
 		default:
-			setCursor(0, 5);
-			wcout << L"\aChoose a correct option!";
+			clear();
+			wcout << L"Select whether to connect to a known host or wait for incoming connections:" << endl;
+			wcout << L"\tPress 1 - Connect to an IP address" << endl;
+			wcout << L"\tPress 2 - Accept any incoming connection" << endl;
+
+			wcout << L"\a\nChoose a correct option!";
 		}
 	}
 
@@ -99,24 +100,34 @@ int main(int argc, char const* argv[]) {
 		// The sockaddr_in structure specifies the address family,
 		// IP address, and port for the socket that is being bound or connected to.
 		service.sin_family = AF_INET;
-		errorCode = InetPton(AF_INET, IPAddr, &service.sin_addr.s_addr);
-		if (!errorCode)
-			throw errorCode;
+		if (InetPton(AF_INET, IPAddr.c_str(), &service.sin_addr.s_addr) != 1) { throw wrongIP(); }
 		service.sin_port = htons(port);
+
+		switch (mode) {
+		case client:
+			if (connect(defSocket, (sockaddr*)&service, sizeof(service))) { throw - 1; }
+			break;
+		case server:
+			if (bind(defSocket, (sockaddr*)&service, sizeof(service))) { throw - 1; }
+			if (listen(defSocket, 1)) { throw - 1; }
+			SOCKET serverSocket = accept(defSocket, NULL, NULL);
+			if (serverSocket == INVALID_SOCKET) { throw 1; }
+			break;
+		}
 	}
 	catch (int e) {
 		wcerr << L"Error (" << e << L"): " << WSAGetLastError();
 
 		WSACleanup();
 		closesocket(defSocket);
-		return EXIT_SUCCESS;
+		return EXIT_FAILURE;
 	}
 	catch (exception& e) {
-		wcerr << L"Unknown error: " << e.what();
+		wcerr << L"Error: " << e.what();
 
 		WSACleanup();
 		closesocket(defSocket);
-		return EXIT_SUCCESS;
+		return EXIT_FAILURE;
 	}
 
 	WSACleanup();
