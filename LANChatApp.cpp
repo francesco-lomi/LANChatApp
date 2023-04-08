@@ -45,13 +45,20 @@ COORD gcsbi() {
 	return csbi.dwSize;
 }
 
+int Send(SOCKET &s, string &buf) {
+	return send(s, buf.c_str(), sizeof(buf), 0);
+}
+
 int main(int argc, char const* argv[]) {
 	WSADATA wsaData;
 	SOCKET defSocket = INVALID_SOCKET;
-	sockaddr_in service{};
+	SOCKET serverSocket = INVALID_SOCKET;
+	sockaddr_in service;
 	wstring IPAddr = L"127.0.0.1";
+	string toSend = "";
+	char toRecv[2048] = "";
 	int port = 54321;
-	enum { unchoosen, client, server } mode = unchoosen;
+	enum { unchoosen, client, server, exit } mode = unchoosen;
 
 	SetWindowText(GetForegroundWindow(), L"LANChatApp");
 
@@ -103,32 +110,62 @@ int main(int argc, char const* argv[]) {
 		if (InetPton(AF_INET, IPAddr.c_str(), &service.sin_addr.s_addr) != 1) { throw wrongIP(); }
 		service.sin_port = htons(port);
 
+		clear();
+
 		switch (mode) {
 		case client:
-			if (connect(defSocket, (sockaddr*)&service, sizeof(service))) { throw - 1; }
+			wcout << L"Trying to connect to " << IPAddr << "..." << endl;
+			if (connect(defSocket, (sockaddr*)&service, sizeof(service))) { throw -1; }
 			break;
 		case server:
-			if (bind(defSocket, (sockaddr*)&service, sizeof(service))) { throw - 1; }
-			if (listen(defSocket, 1)) { throw - 1; }
-			SOCKET serverSocket = accept(defSocket, NULL, NULL);
+			if (bind(defSocket, (sockaddr*)&service, sizeof(service))) { throw -1; }
+			if (listen(defSocket, 1)) { throw -1; }
+			sockaddr_in clientAddr;
+			int clientAddrLen = sizeof(clientAddr);
+			wcout << L"Waiting for connections..." << endl;
+			serverSocket = accept(defSocket, (sockaddr*)&clientAddr, &clientAddrLen);
 			if (serverSocket == INVALID_SOCKET) { throw 1; }
 			break;
 		}
 	}
 	catch (int e) {
-		wcerr << L"Error (" << e << L"): " << WSAGetLastError();
+		wcerr << L"Error (" << e << L"): " << WSAGetLastError() << endl;
 
 		WSACleanup();
 		closesocket(defSocket);
 		return EXIT_FAILURE;
 	}
-	catch (exception& e) {
-		wcerr << L"Error: " << e.what();
+	catch (const exception& e) {
+		wcerr << L"Error: " << e.what() << endl;;
 
 		WSACleanup();
 		closesocket(defSocket);
 		return EXIT_FAILURE;
 	}
+
+	try
+	{
+		while (mode != exit) {
+			
+		}
+	}
+	catch (int e)
+	{
+		wcerr << L"Error (" << e << L"): " << WSAGetLastError() << endl;
+
+		WSACleanup();
+		closesocket(defSocket);
+		return EXIT_FAILURE;
+	}
+	catch (const exception& e)
+	{
+		wcerr << L"Error: " << e.what() << endl;;
+
+		WSACleanup();
+		closesocket(defSocket);
+		return EXIT_FAILURE;
+	}
+
 
 	WSACleanup();
 	closesocket(defSocket);
