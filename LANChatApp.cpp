@@ -47,21 +47,8 @@ class WSAError : public exception {
 	}
 };
 
-void setCursor(int x, int y) {
-	COORD coords = {};
-	coords.X = x;
-	coords.Y = y;
-	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coords);
-}
-
 void clear() {
 	system("cls");
-}
-
-COORD gcsbi() {
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
-	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-	return csbi.dwSize;
 }
 
 int main(int argc, char const* argv[]) {
