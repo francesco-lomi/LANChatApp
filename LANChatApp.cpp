@@ -31,6 +31,22 @@ class wrongIP : public exception {
 	}
 };
 
+class WSAError : public exception {
+	virtual const char* what() const throw() {
+		int err = WSAGetLastError();
+		LPWSTR bufPtr = NULL;
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&bufPtr), 0, NULL);
+
+		int size = WideCharToMultiByte(CP_UTF8, 0, bufPtr, static_cast<int>(wcslen(bufPtr)), nullptr, 0, nullptr, nullptr);
+		char* cstr = new char[(size) + 1];
+		cstr[size] = '\0';
+
+		WideCharToMultiByte(CP_UTF8, 0, bufPtr, static_cast<int>(wcslen(bufPtr)), cstr, size, nullptr, nullptr);
+		
+		return cstr;
+	}
+};
+
 void setCursor(int x, int y) {
 	COORD coords = {};
 	coords.X = x;
@@ -52,7 +68,6 @@ int main(int argc, char const* argv[]) {
 	WSADATA wsaData;
 	sockaddr_in service;
 	int port = 54321;
-	wstring IPAddr = L"";
 	service.sin_family = AF_INET;
 	service.sin_port = htons(port);
 	SOCKET acceptSocket = INVALID_SOCKET;
@@ -79,9 +94,10 @@ int main(int argc, char const* argv[]) {
 	try {
 		while (acceptSocket == INVALID_SOCKET) {
 			switch (_getch()) {
-			case '1':
+			case '1': {
+				wstring IPAddr = L"";
 				acceptSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-				if (acceptSocket == INVALID_SOCKET) { throw INVALID_SOCKET; }
+				if (acceptSocket == INVALID_SOCKET) { throw WSAError();; }
 
 				clear();
 
@@ -91,16 +107,17 @@ int main(int argc, char const* argv[]) {
 				if (InetPton(AF_INET, IPAddr.c_str(), &service.sin_addr.s_addr) != 1) { throw wrongIP(); }
 
 				wcout << L"Trying to connect to " << IPAddr << "..." << endl;
-				if (connect(acceptSocket, reinterpret_cast<sockaddr*>(&service), sizeof(service))) { throw - 1; }
+				if (connect(acceptSocket, reinterpret_cast<sockaddr*>(&service), sizeof(service))) { throw WSAError(); }
 
 				break;
+			}
 			case '2': {
 				service.sin_addr.s_addr = INADDR_ANY;
 				SOCKET listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-				if (listenSocket == INVALID_SOCKET) { throw INVALID_SOCKET; }
+				if (listenSocket == INVALID_SOCKET) { throw WSAError();; }
 
-				if (bind(listenSocket, reinterpret_cast<sockaddr*>(&service), sizeof(service))) { throw - 1; }
-				if (listen(listenSocket, 1)) { throw - 1; }
+				if (bind(listenSocket, reinterpret_cast<sockaddr*>(&service), sizeof(service))) { throw WSAError(); }
+				if (listen(listenSocket, 1)) { throw WSAError(); }
 
 				sockaddr_in clientAddr;
 				int clientAddrLen = sizeof(clientAddr);
@@ -108,10 +125,10 @@ int main(int argc, char const* argv[]) {
 				wcout << endl << L"Waiting for connections..." << endl;
 				acceptSocket = accept(listenSocket, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrLen);
 				closesocket(listenSocket);
-				if (acceptSocket == INVALID_SOCKET) { throw INVALID_SOCKET; }
+				if (acceptSocket == INVALID_SOCKET) { throw WSAError();; }
 
 				break;
-				}
+			}
 			default:
 				clear();
 				wcout << L"Select whether to connect to a known host or wait for incoming connections:" << endl;
@@ -123,19 +140,15 @@ int main(int argc, char const* argv[]) {
 			}
 		}
 	}
-	catch (int e) {
-		int err = WSAGetLastError();
-		LPWSTR bufPtr = NULL;
-		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&bufPtr), 0, NULL);
-
-		wcerr << endl << L"Error (" << e << L"): " << bufPtr << L"Code: " << err << endl;
+	catch (const exception& e) {
+		wcerr << endl << L"Error: " << e.what() << endl;
 
 		closesocket(acceptSocket);
 		WSACleanup();
 		return EXIT_FAILURE;
 	}
-	catch (const exception& e) {
-		wcerr << endl << L"Error: " << e.what() << endl;
+	catch (...) {
+		wcerr << endl << L"Unknown error occurred" << endl;
 
 		closesocket(acceptSocket);
 		WSACleanup();
