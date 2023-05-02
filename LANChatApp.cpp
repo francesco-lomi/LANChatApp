@@ -48,7 +48,10 @@ class WSAError : public exception {
 	}
 };
 
+SOCKET acceptSocket = INVALID_SOCKET;
 mutex iostreamMutex{}, WSAMutex{};
+exception_ptr tException = nullptr;
+
 char hostName[NI_MAXHOST];
 char serviceName[NI_MAXSERV];
 WCHAR ipAddress[INET_ADDRSTRLEN];
@@ -72,13 +75,22 @@ void help() {
 	wcout << L"[INFO] Press: i - type a message (max 1023 characters), f - send a file, h - display this help info, q - quit" << endl;
 }
 
+void recvThreadf() {
+	try {
+		unique_lock<mutex> iosLockT(iostreamMutex, defer_lock);
+		unique_lock<mutex> wsaLockT(WSAMutex, defer_lock);
+	}
+	catch (const exception& e) {
+		tException = current_exception();
+	}
+}
+
 int main(int argc, char const* argv[]) {
 	WSADATA wsaData;
 	int port = 54321;
 	sockaddr_in service;
 	service.sin_family = AF_INET;
 	service.sin_port = htons(port);
-	SOCKET acceptSocket = INVALID_SOCKET;
 
 	SetWindowText(GetForegroundWindow(), L"LANChatApp");
 
@@ -174,8 +186,12 @@ int main(int argc, char const* argv[]) {
 	help();
 
 	try {
+		thread recvThread(recvThreadf);
+
 		unique_lock<mutex> iosLock(iostreamMutex, defer_lock);
 		unique_lock<mutex> wsaLock(WSAMutex, defer_lock);
+		recvThread.join();
+		if (tException != nullptr) { rethrow_exception(tException); }
 	}
 	catch (const exception& e) {
 		wcerr << endl << L"\aError: " << e.what() << "Code: " << GetLastError() << endl;
