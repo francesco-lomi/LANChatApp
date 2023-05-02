@@ -151,6 +151,14 @@ void recvThreadf() {
 				wsaLockT.unlock();
 
 				switch (recvData.type) {
+					case dataClass::quit: {
+						isRunning = false;
+
+						iosLockT.lock();
+						wcout << L"[QUIT] " << hostName << L" quitted." << endl;
+						iosLockT.unlock();
+						break;
+					}
 					case dataClass::text: {
 						iosLockT.lock();
 						wcout << recvData;
@@ -305,6 +313,21 @@ int main(int argc, char const* argv[]) {
 					iosLock.lock();
 					help();
 					iosLock.unlock();
+					break;
+				}
+				case 'q': {
+					if (!isRunning) { break; }
+					isRunning = false;
+
+					dataClass sendData;
+					sendData.type = dataClass::quit;
+
+					wsaLock.lock();
+					if (send(acceptSocket, reinterpret_cast<char*>(&sendData), sizeof(sendData), NULL) == SOCKET_ERROR)
+						throw WSAError();
+					wsaLock.unlock();
+
+					wcout << L"[QUIT] You quitted." << endl;
 					break;
 				}
 				default: {
