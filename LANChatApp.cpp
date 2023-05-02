@@ -47,6 +47,17 @@ class WSAError : public exception {
 	}
 };
 
+class dataClass {
+public:
+	enum { text, file, quit } type = dataClass::text;
+
+	wchar_t contents[1024];
+
+	friend std::wostream& operator<<(std::wostream& wos, const dataClass& obj) {
+		wos << "[" << hostName << "] " << obj.contents << endl;
+		return wos;
+	}
+};
 void clear() {
 	system("cls");
 }
