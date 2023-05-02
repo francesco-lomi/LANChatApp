@@ -34,14 +34,14 @@ class wrongIP : public exception {
 class WSAError : public exception {
 	virtual const char* what() const throw() {
 		int err = WSAGetLastError();
-		LPWSTR bufPtr = NULL;
-		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&bufPtr), 0, NULL);
+		LPWSTR wstr = NULL;
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&wstr), 0, NULL);
 
-		int size = WideCharToMultiByte(CP_UTF8, 0, bufPtr, static_cast<int>(wcslen(bufPtr)), nullptr, 0, nullptr, nullptr);
-		char* cstr = new char[(size) + 1];
+		int size = WideCharToMultiByte(CP_UTF8, NULL, wstr, static_cast<int>(wcslen(wstr)), nullptr, NULL, nullptr, nullptr);
+		char* cstr = new char[size + 1];
 		cstr[size] = '\0';
 
-		WideCharToMultiByte(CP_UTF8, 0, bufPtr, static_cast<int>(wcslen(bufPtr)), cstr, size, nullptr, nullptr);
+		WideCharToMultiByte(CP_UTF8, NULL, wstr, static_cast<int>(wcslen(wstr)), cstr, size, nullptr, nullptr);
 		
 		return cstr;
 	}
