@@ -47,6 +47,10 @@ class WSAError : public exception {
 	}
 };
 
+char hostName[NI_MAXHOST];
+char serviceName[NI_MAXSERV];
+WCHAR ipAddress[INET_ADDRSTRLEN];
+
 class dataClass {
 public:
 	enum { text, file, quit } type = dataClass::text;
@@ -60,6 +64,10 @@ public:
 };
 void clear() {
 	system("cls");
+}
+
+void help() {
+	wcout << L"[INFO] Press: i - type a message (max 1023 characters), f - send a file, h - display this help info, q - quit" << endl;
 }
 
 int main(int argc, char const* argv[]) {
@@ -78,7 +86,7 @@ int main(int argc, char const* argv[]) {
 		auto err = WSAGetLastError();
 		LPWSTR bufPtr = NULL;
 
-		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&bufPtr), 0, NULL);
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&bufPtr), NULL, NULL);
 		wcerr << L"Error (" << err << L"): " << bufPtr << endl;
 
 		return EXIT_FAILURE;
@@ -95,7 +103,7 @@ int main(int argc, char const* argv[]) {
 			case '1': {
 				wstring IPAddr = L"";
 				acceptSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-				if (acceptSocket == INVALID_SOCKET) { throw WSAError();; }
+				if (acceptSocket == INVALID_SOCKET) { throw WSAError(); }
 
 				clear();
 
@@ -106,6 +114,9 @@ int main(int argc, char const* argv[]) {
 
 				wcout << L"Trying to connect to " << IPAddr << "..." << endl;
 				if (connect(acceptSocket, reinterpret_cast<sockaddr*>(&service), sizeof(service))) { throw WSAError(); }
+
+				InetNtop(AF_INET, &service.sin_addr, ipAddress, INET_ADDRSTRLEN);
+				getnameinfo(reinterpret_cast<sockaddr*>(&service), sizeof(service), hostName, NI_MAXHOST, serviceName, NI_MAXSERV, NI_NUMERICSERV);
 
 				break;
 			}
@@ -123,7 +134,10 @@ int main(int argc, char const* argv[]) {
 				wcout << endl << L"Waiting for connections..." << endl;
 				acceptSocket = accept(listenSocket, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrLen);
 				closesocket(listenSocket);
-				if (acceptSocket == INVALID_SOCKET) { throw WSAError();; }
+				if (acceptSocket == INVALID_SOCKET) { throw WSAError(); }
+
+				InetNtop(AF_INET, &clientAddr.sin_addr, ipAddress, INET_ADDRSTRLEN);
+				getnameinfo(reinterpret_cast<sockaddr*>(&clientAddr), sizeof(clientAddr), hostName, NI_MAXHOST, serviceName, NI_MAXSERV, NI_NUMERICSERV);
 
 				break;
 			}
@@ -153,7 +167,11 @@ int main(int argc, char const* argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	WSACleanup();
+	clear();
+	wcout << L"[INFO] Connected to: " << serviceName << L":" << ipAddress << L" - " << hostName << endl;
+	help();
 	closesocket(acceptSocket);
-	return EXIT_SUCCESS;
+	WSACleanup();
+	system("pause >nul");
+	return 0;
 }
