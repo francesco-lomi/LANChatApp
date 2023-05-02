@@ -16,11 +16,13 @@
 #include <iostream>
 #include <fstream>
 #include <locale>
+#include <cstring>
 #include <thread>
 #include <mutex>
 #include <exception>
 #include <string>
 #include <conio.h>
+#include <regex>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -49,6 +51,7 @@ class WSAError : public exception {
 };
 
 SOCKET acceptSocket = INVALID_SOCKET;
+bool isRunning = true;
 mutex iostreamMutex{}, WSAMutex{};
 exception_ptr tException = nullptr;
 
@@ -75,12 +78,56 @@ void help() {
 	wcout << L"[INFO] Press: i - type a message (max 1023 characters), f - send a file, h - display this help info, q - quit" << endl;
 }
 
+int prepareMessage(const wstring input, dataClass* data) {
+	wstring result;
+	for (wchar_t c : input) {
+		switch (c) {
+		case L'\n':
+			result += L"\\n";
+			break;
+		case L'\r':
+			result += L"\\r";
+			break;
+		case L'\t':
+			result += L"\\t";
+			break;
+		case L'\b':
+			result += L"\\b";
+			break;
+		case L'\f':
+			result += L"\\f";
+			break;
+		case L'\\':
+			result += L"\\\\";
+			break;
+		default:
+			if (c >= 0 && c <= 31) {
+				result += L"\\x";
+				result += (c / 16 < 10 ? (c / 16 + L'0') : (c / 16 - 10 + L'A'));
+				result += (c % 16 < 10 ? (c % 16 + L'0') : (c % 16 - 10 + L'A'));
+			}
+			else {
+				result += c;
+			}
+		}
+	}
+
+	if (result.length() > 1023)
+		return 1;
+
+	wcsncpy_s(data->contents, result.c_str(), 1023);
+	data->contents[1023] = L'\0';
+
+	return 0;
+}
+
 void recvThreadf() {
 	try {
 		unique_lock<mutex> iosLockT(iostreamMutex, defer_lock);
 		unique_lock<mutex> wsaLockT(WSAMutex, defer_lock);
 	}
 	catch (const exception& e) {
+		isRunning = false;
 		tException = current_exception();
 	}
 }
@@ -190,6 +237,47 @@ int main(int argc, char const* argv[]) {
 
 		unique_lock<mutex> iosLock(iostreamMutex, defer_lock);
 		unique_lock<mutex> wsaLock(WSAMutex, defer_lock);
+
+		while (isRunning) {
+			switch (_getch()) {
+				case 'i': {
+					if (!isRunning) { break; }
+					dataClass sendData;
+					wstring inputMessage;
+
+					iosLock.lock();
+					wcout << L"[YOU] ";
+					getline((wcin >> ws), inputMessage);
+
+					if (prepareMessage(inputMessage, &sendData)) {
+						wcout << L"[INFO] After securing your message of any exploits its size exceeded the maximum message size of 1023 characters." << endl;
+						iosLock.unlock();
+						break;
+					}
+					iosLock.unlock();
+
+					wsaLock.lock();
+					if (send(acceptSocket, reinterpret_cast<char*>(&sendData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+						throw WSAError();
+					wsaLock.unlock();
+
+					break;
+				}
+				case 'h': {
+					if (!isRunning) { break; }
+					
+					iosLock.lock();
+					help();
+					iosLock.unlock();
+					break;
+				}
+				default: {
+					if (!isRunning) { break; }
+					wcout << L"\a[INFO] Press a correct button (h for help)" << endl;
+					break;
+				}
+			}
+		}
 		recvThread.join();
 		if (tException != nullptr) { rethrow_exception(tException); }
 	}
