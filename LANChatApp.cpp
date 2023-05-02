@@ -125,6 +125,42 @@ void recvThreadf() {
 	try {
 		unique_lock<mutex> iosLockT(iostreamMutex, defer_lock);
 		unique_lock<mutex> wsaLockT(WSAMutex, defer_lock);
+		u_long mode;
+		dataClass recvData;
+
+		while (isRunning) {
+			wsaLockT.lock();
+			mode = 1;
+			if (ioctlsocket(acceptSocket, FIONBIO, &mode) != NO_ERROR)
+				throw WSAError();
+			if (recv(acceptSocket, reinterpret_cast<char*>(&recvData), sizeof(dataClass), NULL) == SOCKET_ERROR) {
+				if (WSAGetLastError() == WSAEWOULDBLOCK) {
+					mode = 0;
+					if (ioctlsocket(acceptSocket, FIONBIO, &mode) != NO_ERROR)
+						throw WSAError();
+					wsaLockT.unlock();
+				}
+				else {
+					throw WSAError();
+				}
+			}
+			else {
+				mode = 0;
+				if (ioctlsocket(acceptSocket, FIONBIO, &mode) != NO_ERROR)
+					throw WSAError();
+				wsaLockT.unlock();
+
+				switch (recvData.type) {
+					case dataClass::text: {
+						iosLockT.lock();
+						wcout << recvData;
+						iosLockT.unlock();
+						break;
+					}
+				}
+			}
+			Sleep(200);
+		}
 	}
 	catch (const exception& e) {
 		isRunning = false;
