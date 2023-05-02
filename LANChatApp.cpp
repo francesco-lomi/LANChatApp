@@ -70,6 +70,15 @@ public:
 		return wos;
 	}
 };
+
+void recvFile() {
+
+}
+
+void sendFile() {
+
+}
+
 void clear() {
 	system("cls");
 }
@@ -157,6 +166,10 @@ void recvThreadf() {
 						iosLockT.lock();
 						wcout << L"[QUIT] " << hostName << L" quitted." << endl;
 						iosLockT.unlock();
+						break;
+					}
+					case dataClass::file: {
+						recvFile();
 						break;
 					}
 					case dataClass::text: {
@@ -305,6 +318,11 @@ int main(int argc, char const* argv[]) {
 						throw WSAError();
 					wsaLock.unlock();
 
+					break;
+				}
+				case 'f': {
+					if (!isRunning) { break; }
+					sendFile();
 					break;
 				}
 				case 'h': {
