@@ -17,6 +17,7 @@
 #include <fstream>
 #include <locale>
 #include <thread>
+#include <mutex>
 #include <exception>
 #include <string>
 #include <conio.h>
@@ -47,6 +48,7 @@ class WSAError : public exception {
 	}
 };
 
+mutex iostreamMutex{}, WSAMutex{};
 char hostName[NI_MAXHOST];
 char serviceName[NI_MAXSERV];
 WCHAR ipAddress[INET_ADDRSTRLEN];
@@ -72,8 +74,8 @@ void help() {
 
 int main(int argc, char const* argv[]) {
 	WSADATA wsaData;
-	sockaddr_in service;
 	int port = 54321;
+	sockaddr_in service;
 	service.sin_family = AF_INET;
 	service.sin_port = htons(port);
 	SOCKET acceptSocket = INVALID_SOCKET;
@@ -153,14 +155,14 @@ int main(int argc, char const* argv[]) {
 		}
 	}
 	catch (const exception& e) {
-		wcerr << endl << L"Error: " << e.what() << endl;
+		wcerr << endl << L"\aError: " << e.what() << endl;
 
 		closesocket(acceptSocket);
 		WSACleanup();
 		return EXIT_FAILURE;
 	}
 	catch (...) {
-		wcerr << endl << L"Unknown error occurred" << endl;
+		wcerr << endl << L"\aUnknown error occurred" << endl;
 
 		closesocket(acceptSocket);
 		WSACleanup();
@@ -170,6 +172,28 @@ int main(int argc, char const* argv[]) {
 	clear();
 	wcout << L"[INFO] Connected to: " << serviceName << L":" << ipAddress << L" - " << hostName << endl;
 	help();
+
+	try {
+		unique_lock<mutex> iosLock(iostreamMutex, defer_lock);
+		unique_lock<mutex> wsaLock(WSAMutex, defer_lock);
+	}
+	catch (const exception& e) {
+		wcerr << endl << L"\aError: " << e.what() << "Code: " << GetLastError() << endl;
+
+		closesocket(acceptSocket);
+		WSACleanup();
+		system("pause >nul");
+		return 1;
+	}
+	catch (...) {
+		wcerr << endl << L"\aUnknown error occurred" << endl;
+
+		closesocket(acceptSocket);
+		WSACleanup();
+		system("pause >nul");
+		return 1;
+	}
+
 	closesocket(acceptSocket);
 	WSACleanup();
 	system("pause >nul");
