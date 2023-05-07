@@ -13,6 +13,7 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <mswsock.h>
 #include <iostream>
 #include <fstream>
 #include <locale>
@@ -23,14 +24,42 @@
 #include <string>
 #include <conio.h>
 #include <regex>
+#include <commdlg.h>
 
 #pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "mswsock.lib")
+
+#define BYTES_PER_SEND 512
 
 using namespace std;
 
 class wrongIP : public exception {
 	virtual const char* what() const throw() {
 		return "Wrong IP address!";
+	}
+};
+
+class commDlgError : public exception {
+	virtual const char* what() const throw() {
+		char dwordChar[9];
+		sprintf_s(dwordChar, "%08X", CommDlgExtendedError());
+		return dwordChar;
+	}
+};
+
+class fileError : public exception {
+	virtual const char* what() const throw() {
+		int err = GetLastError();
+		LPWSTR wstr = NULL;
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&wstr), 0, NULL);
+
+		int size = WideCharToMultiByte(CP_UTF8, NULL, wstr, static_cast<int>(wcslen(wstr)), nullptr, NULL, nullptr, nullptr);
+		char* cstr = new char[size + 1];
+		cstr[size] = '\0';
+
+		WideCharToMultiByte(CP_UTF8, NULL, wstr, static_cast<int>(wcslen(wstr)), cstr, size, nullptr, nullptr);
+
+		return cstr;
 	}
 };
 
@@ -61,7 +90,7 @@ WCHAR ipAddress[INET_ADDRSTRLEN];
 
 class dataClass {
 public:
-	enum { text, file, quit } type = dataClass::text;
+	enum { text, file, confirmFile, fileEnd, quit } type = dataClass::text;
 
 	wchar_t contents[1024];
 
@@ -71,12 +100,92 @@ public:
 	}
 };
 
+class fileClass {
+public:
+	wchar_t fileName[64];
+	LARGE_INTEGER fileSize;
+};
+
 void recvFile() {
 
 }
 
-void sendFile() {
+void sendFile(SOCKET& socket) {
+	unique_lock<mutex> iosLockF(iostreamMutex, defer_lock);
+	unique_lock<mutex> wsaLockF(WSAMutex, defer_lock);
 
+	wchar_t fileName[MAX_PATH];
+	ZeroMemory(&fileName, sizeof(fileName));
+	wchar_t fileTitle[128];
+	ZeroMemory(&fileTitle, sizeof(fileTitle));
+
+	OPENFILENAME commOFN;
+	ZeroMemory(&commOFN, sizeof(commOFN));
+
+	commOFN.lStructSize = sizeof(OPENFILENAME);
+	commOFN.hwndOwner = GetForegroundWindow();
+	commOFN.lpstrFilter = L"All Files\0*.*\0\0";
+	commOFN.nFilterIndex = 1;
+	commOFN.lpstrFile = fileName;
+	commOFN.nMaxFile = MAX_PATH;
+	commOFN.lpstrFileTitle = fileTitle;
+	commOFN.nMaxFileTitle = 128;
+	commOFN.lpstrInitialDir = L"%userprofile%";
+	commOFN.lpstrTitle = NULL;
+	commOFN.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST;
+
+	if (!GetOpenFileName(&commOFN)) {
+		if (!CommDlgExtendedError()) {
+			iosLockF.lock();
+			wcout << L"[INFO] You closed the Open File window without choosing a file to send." << endl;
+			iosLockF.unlock();
+			return;
+		}
+		else {
+			throw commDlgError();
+		}
+	}
+
+	HANDLE hFile = CreateFile(fileName, FILE_GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+	if (hFile == INVALID_HANDLE_VALUE)
+		throw fileError();
+
+	LARGE_INTEGER fileSize;
+	if (!GetFileSizeEx(hFile, &fileSize))
+		throw fileError();
+
+	wsaLockF.lock();
+
+	dataClass initData;
+	initData.type = dataClass::file;
+	send(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL);
+	recv(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL);
+	if (initData.type != dataClass::confirmFile) {
+		if (!CloseHandle(hFile))
+			throw fileError();
+		iosLockF.lock();
+		wcout << L"[ERROR] Error sending file." << endl;
+		iosLockF.unlock();
+		wsaLockF.unlock();
+		return;
+	}
+
+	fileClass* infoData = new fileClass;
+	infoData->fileSize = fileSize;
+	wcscpy_s(infoData->fileName, fileTitle);
+	
+	TRANSMIT_FILE_BUFFERS transmitFileBuffer{infoData, sizeof(fileClass), nullptr, NULL};
+
+	if (!TransmitFile(socket, hFile, NULL, BYTES_PER_SEND, NULL, &transmitFileBuffer, NULL))
+		throw WSAError();
+	
+	
+	if (!CloseHandle(hFile))
+		throw fileError();
+	iosLockF.lock();
+	wcout << L"[YOU - Sent file] " << *commOFN.lpstrFileTitle << endl;
+	iosLockF.unlock();
+	wsaLockF.unlock();
 }
 
 void clear() {
@@ -322,7 +431,7 @@ int main(int argc, char const* argv[]) {
 				}
 				case 'f': {
 					if (!isRunning) { break; }
-					sendFile();
+					sendFile(acceptSocket);
 					break;
 				}
 				case 'h': {
@@ -359,7 +468,7 @@ int main(int argc, char const* argv[]) {
 		if (tException != nullptr) { rethrow_exception(tException); }
 	}
 	catch (const exception& e) {
-		wcerr << endl << L"\aError: " << e.what() << "Code: " << GetLastError() << endl;
+		wcerr << endl << L"\aError: " << e.what() << "Windows error code: " << GetLastError() << endl;
 
 		closesocket(acceptSocket);
 		WSACleanup();
