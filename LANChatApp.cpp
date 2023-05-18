@@ -90,9 +90,17 @@ WCHAR ipAddress[INET_ADDRSTRLEN];
 
 class dataClass {
 public:
-	enum { text, file, confirmFile, fileEnd, quit } type = dataClass::text;
-
+	enum typE { text, file, confirmFile, startFile, cancelFile, endFile, quit } type = dataClass::text;
 	wchar_t contents[1024];
+
+	dataClass() {
+		ZeroMemory(&contents, sizeof(contents));
+	}
+
+	dataClass(typE constrType) {
+		ZeroMemory(&contents, sizeof(contents));
+		type = constrType;
+	}
 
 	friend std::wostream& operator<<(std::wostream& wos, const dataClass& obj) {
 		wos << "[" << hostName << "] " << obj.contents << endl;
