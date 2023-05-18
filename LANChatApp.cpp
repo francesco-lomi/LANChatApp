@@ -193,7 +193,7 @@ void clear() {
 }
 
 void help() {
-	wcout << L"[INFO] Press: i - type a message (max 1023 characters), f - send a file, h - display this help info, q - quit" << endl;
+	wcout << L"[INFO] Press: i - type a message (max 1023 characters), f - send a file, h - display this help info, - clear screen, q - quit" << endl;
 }
 
 int prepareMessage(const wstring input, dataClass* data) {
@@ -215,9 +215,9 @@ int prepareMessage(const wstring input, dataClass* data) {
 		case L'\f':
 			result += L"\\f";
 			break;
-		case L'\\':
-			result += L"\\\\";
-			break;
+		//case L'\\':
+		//	result += L"\\\\";
+		//	break;
 		default:
 			if (c >= 0 && c <= 31) {
 				result += L"\\x";
@@ -441,6 +441,11 @@ int main(int argc, char const* argv[]) {
 					help();
 					iosLock.unlock();
 					break;
+				}
+				case 'c': {
+					iosLock.lock();
+					clear();
+					iosLock.unlock();
 				}
 				case 'q': {
 					if (!isRunning) { break; }
