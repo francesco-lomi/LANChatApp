@@ -29,7 +29,7 @@
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "mswsock.lib")
 
-#define BYTES_PER_SEND 512
+#define BYTES_PER_SEND 1024
 
 using namespace std;
 
@@ -110,7 +110,12 @@ public:
 
 class fileClass {
 public:
-	wchar_t fileName[64];
+	fileClass() {
+		ZeroMemory(&fileTitle, sizeof(fileTitle));
+		ZeroMemory(&fileSize, sizeof(fileSize));
+	}
+
+	wchar_t fileTitle[64];
 	LARGE_INTEGER fileSize;
 };
 
