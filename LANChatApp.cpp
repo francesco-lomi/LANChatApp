@@ -179,6 +179,50 @@ void recvFile(SOCKET& socket) {
 	HANDLE hFile = CreateFile(fileName, GENERIC_WRITE, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 		throw fileError();
+
+	initData.type = dataClass::startFile;
+	if (send(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
+
+	unsigned char buf[BYTES_PER_SEND];
+	ZeroMemory(&buf, BYTES_PER_SEND);
+	int bytesReceived = 0;
+	int bytesToReceive = 0;
+	uint64_t bytesWritten = 0;
+	DWORD bytesWrittenToFile = 0;
+
+	while (bytesWritten < fileData.fileSize.QuadPart) {
+		ZeroMemory(&buf, BYTES_PER_SEND);
+		bytesToReceive = static_cast<int>(min<uint64_t>(BYTES_PER_SEND, fileData.fileSize.QuadPart - bytesWritten));
+		bytesReceived = recv(socket, reinterpret_cast<char*>(&buf), bytesToReceive, NULL);
+		if (bytesReceived <= 0)
+			throw WSAError();
+		if (!WriteFile(hFile, &buf, bytesReceived, &bytesWrittenToFile, NULL) || bytesWrittenToFile != bytesReceived)
+			throw fileError();
+		bytesWritten += bytesWrittenToFile;
+	}
+
+	if (recv(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
+
+	if (initData.type != dataClass::endFile) {
+		if (!CloseHandle(hFile))
+			throw fileError();
+		iosLockF.lock();
+		wcout << L"[ERROR] Error receiving file." << endl;
+		iosLockF.unlock();
+		wsaLockF.unlock();
+		return;
+	}
+
+	if (!CloseHandle(hFile))
+		throw fileError();
+
+	iosLockF.lock();
+	wcout << L"[FILE] \"" << fileData.fileTitle << L"\" received successfully." << endl;
+	iosLockF.unlock();
+
+	wsaLockF.unlock();
 }
 
 void sendFile(SOCKET& socket) {
