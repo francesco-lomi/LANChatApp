@@ -218,11 +218,28 @@ void sendFile(SOCKET& socket) {
 	iosLockF.lock();
 	wcout << L"[FILE] Outgoing file transfer..." << endl;
 	
+	unsigned char buf[BYTES_PER_SEND];
+	ZeroMemory(&buf, BYTES_PER_SEND);
+	DWORD bytesRead;
+	if (!ReadFile(hFile, &buf, BYTES_PER_SEND, &bytesRead, NULL))
+		throw fileError();
+
+	while (bytesRead > 0) {
+		if (send(socket, reinterpret_cast<char*>(&buf), bytesRead, NULL) == SOCKET_ERROR)
+			throw WSAError();
+		ZeroMemory(&buf, BYTES_PER_SEND);
+		if (!ReadFile(hFile, &buf, BYTES_PER_SEND, &bytesRead, NULL))
+			throw fileError();
+	}
 	
 	if (!CloseHandle(hFile))
 		throw fileError();
-	iosLockF.lock();
-	wcout << L"[YOU - Sent file] " << *commOFN.lpstrFileTitle << endl;
+
+	initData.type = dataClass::endFile;
+	if (send(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
+	
+	wcout << L"[FILE] \"" << fileTitle << L"\" sent successfully." << endl;
 	iosLockF.unlock();
 	wsaLockF.unlock();
 }
