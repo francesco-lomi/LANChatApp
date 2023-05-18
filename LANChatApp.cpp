@@ -137,6 +137,48 @@ void recvFile(SOCKET& socket) {
 
 	wcout << L"[FILE] Incoming file transfer..." << endl;
 	iosLockF.unlock();
+
+	wchar_t fileName[MAX_PATH];
+	ZeroMemory(&fileName, sizeof(fileName));
+	wcscpy_s(fileName, L"%userprofile%\\Downloads\\");
+	wcscat_s(fileName, fileData.fileTitle);
+
+	wchar_t fileTitle[64];
+	ZeroMemory(&fileTitle, sizeof(fileTitle));
+
+	OPENFILENAME commOFN;
+	ZeroMemory(&commOFN, sizeof(commOFN));
+
+	commOFN.lStructSize = sizeof(OPENFILENAME);
+	commOFN.hwndOwner = GetForegroundWindow();
+	commOFN.lpstrFilter = L"All Files\0*.*\0\0";
+	commOFN.nFilterIndex = 1;
+	commOFN.lpstrFile = fileName;
+	commOFN.nMaxFile = MAX_PATH;
+	commOFN.lpstrFileTitle = fileTitle;
+	commOFN.nMaxFileTitle = 64;
+	commOFN.lpstrInitialDir = L"%userprofile%\\Downloads\\";
+	commOFN.lpstrTitle = NULL;
+	commOFN.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_NOREADONLYRETURN | OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+
+	if (!GetSaveFileName(&commOFN)) {
+		if (!CommDlgExtendedError()) {
+			iosLockF.lock();
+			wcout << L"[INFO] You closed the \"Save As\" windows without choosing save location, cancelling operation." << endl;
+			iosLockF.unlock();
+			initData.type = dataClass::cancelFile;
+			send(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL);
+			wsaLockF.unlock();
+			return;
+		}
+		else {
+			throw commDlgError();
+		}
+	}
+
+	HANDLE hFile = CreateFile(fileName, GENERIC_WRITE, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile == INVALID_HANDLE_VALUE)
+		throw fileError();
 }
 
 void sendFile(SOCKET& socket) {
