@@ -119,8 +119,24 @@ public:
 	LARGE_INTEGER fileSize;
 };
 
-void recvFile() {
+void recvFile(SOCKET& socket) {
+	unique_lock<mutex> iosLockF(iostreamMutex);
+	unique_lock<mutex> wsaLockF(WSAMutex);
 
+	u_long mode = 0;
+	if (ioctlsocket(acceptSocket, FIONBIO, &mode) != NO_ERROR)
+		throw WSAError();
+
+	dataClass initData(dataClass::confirmFile);
+	if (send(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
+
+	fileClass fileData;
+	if (recv(socket, reinterpret_cast<char*>(&fileData), sizeof(fileClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
+
+	wcout << L"[FILE] Incoming file transfer..." << endl;
+	iosLockF.unlock();
 }
 
 void sendFile(SOCKET& socket) {
@@ -334,7 +350,7 @@ void recvThreadf() {
 						break;
 					}
 					case dataClass::file: {
-						recvFile();
+						recvFile(acceptSocket);
 						break;
 					}
 					case dataClass::text: {
@@ -451,7 +467,7 @@ int main(int argc, char const* argv[]) {
 	}
 
 	clear();
-	wcout << L"[INFO] Connected to: " << serviceName << L":" << ipAddress << L" - " << hostName << endl;
+	wcout << L"[INFO] Connected to: " << hostName << L" - " << serviceName << L":" << ipAddress << endl;
 	help();
 
 	try {
