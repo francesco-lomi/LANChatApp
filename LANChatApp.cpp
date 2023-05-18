@@ -129,7 +129,7 @@ void sendFile(SOCKET& socket) {
 
 	wchar_t fileName[MAX_PATH];
 	ZeroMemory(&fileName, sizeof(fileName));
-	wchar_t fileTitle[128];
+	wchar_t fileTitle[64];
 	ZeroMemory(&fileTitle, sizeof(fileTitle));
 
 	OPENFILENAME commOFN;
@@ -142,15 +142,15 @@ void sendFile(SOCKET& socket) {
 	commOFN.lpstrFile = fileName;
 	commOFN.nMaxFile = MAX_PATH;
 	commOFN.lpstrFileTitle = fileTitle;
-	commOFN.nMaxFileTitle = 128;
+	commOFN.nMaxFileTitle = 64;
 	commOFN.lpstrInitialDir = L"%userprofile%";
 	commOFN.lpstrTitle = NULL;
-	commOFN.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST;
+	commOFN.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
 	if (!GetOpenFileName(&commOFN)) {
 		if (!CommDlgExtendedError()) {
 			iosLockF.lock();
-			wcout << L"[INFO] You closed the Open File window without choosing a file to send." << endl;
+			wcout << L"[INFO] You closed the \"Open File\" window without choosing a file to send, cancelling operation." << endl;
 			iosLockF.unlock();
 			return;
 		}
@@ -159,20 +159,21 @@ void sendFile(SOCKET& socket) {
 		}
 	}
 
-	HANDLE hFile = CreateFile(fileName, FILE_GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+	HANDLE hFile = CreateFile(fileName, GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 		throw fileError();
 
-	LARGE_INTEGER fileSize;
-	if (!GetFileSizeEx(hFile, &fileSize))
-		throw fileError();
-
 	wsaLockF.lock();
+	u_long mode = 0;
+	if (ioctlsocket(acceptSocket, FIONBIO, &mode) != NO_ERROR)
+		throw WSAError();
 
-	dataClass initData;
-	initData.type = dataClass::file;
-	send(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL);
-	recv(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL);
+	dataClass initData(dataClass::file);
+	if (send(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
+
+	if (recv(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
 	if (initData.type != dataClass::confirmFile) {
 		if (!CloseHandle(hFile))
 			throw fileError();
@@ -183,13 +184,13 @@ void sendFile(SOCKET& socket) {
 		return;
 	}
 
-	fileClass* infoData = new fileClass;
-	infoData->fileSize = fileSize;
-	wcscpy_s(infoData->fileName, fileTitle);
-	
-	TRANSMIT_FILE_BUFFERS transmitFileBuffer{infoData, sizeof(fileClass), nullptr, NULL};
+	fileClass fileData;
+	wcscpy_s(fileData.fileTitle, fileTitle);
+	if (!GetFileSizeEx(hFile, &fileData.fileSize)) {
+		throw fileError();
+	}
 
-	if (!TransmitFile(socket, hFile, NULL, BYTES_PER_SEND, NULL, &transmitFileBuffer, NULL))
+	if (send(socket, reinterpret_cast<char*>(&fileData), sizeof(fileClass), NULL) == SOCKET_ERROR)
 		throw WSAError();
 	
 	
