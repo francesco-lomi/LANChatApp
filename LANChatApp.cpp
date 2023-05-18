@@ -192,6 +192,31 @@ void sendFile(SOCKET& socket) {
 
 	if (send(socket, reinterpret_cast<char*>(&fileData), sizeof(fileClass), NULL) == SOCKET_ERROR)
 		throw WSAError();
+
+	if (recv(socket, reinterpret_cast<char*>(&initData), sizeof(dataClass), NULL) == SOCKET_ERROR)
+		throw WSAError();
+
+	if (initData.type == dataClass::cancelFile) {
+		if (!CloseHandle(hFile))
+			throw fileError();
+		iosLockF.lock();
+		wcout << L"[INFO] File transfer cancelled by the recipient." << endl;
+		iosLockF.unlock();
+		wsaLockF.unlock();
+		return;
+	}
+	else if (initData.type != dataClass::startFile) {
+		if (!CloseHandle(hFile))
+			throw fileError();
+		iosLockF.lock();
+		wcout << L"[ERROR] Error sending file." << endl;
+		iosLockF.unlock();
+		wsaLockF.unlock();
+		return;
+	}
+
+	iosLockF.lock();
+	wcout << L"[FILE] Outgoing file transfer..." << endl;
 	
 	
 	if (!CloseHandle(hFile))
